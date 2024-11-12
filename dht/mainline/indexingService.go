@@ -3,6 +3,7 @@ package mainline
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"log"
 	mrand "math/rand"
 	"net"
 	"reflect"
@@ -106,6 +107,8 @@ func (is *IndexingService) bootstrap() {
 	if len(bootstrappingIPs) == 0 {
 		return
 	}
+
+	log.Printf("Bootstrapping as routing table is empty...")
 
 	go stats.GetInstance().IncBootstrap()
 

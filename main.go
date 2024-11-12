@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -111,6 +112,8 @@ func main() {
 			if err := database.AddNewTorrent(md.InfoHash, md.Name, md.Files); err != nil {
 				go stats.GetInstance().IncDBError(true)
 			}
+
+			log.Printf("Fetched! Torrent name: %s, Hash: %s\n", md.Name, hex.EncodeToString(md.InfoHash))
 
 		case <-interruptChan:
 			trawlingManager.Terminate()

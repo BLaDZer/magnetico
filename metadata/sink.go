@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"log"
 	"net"
 	"time"
 
@@ -46,6 +47,14 @@ func NewSink(deadline time.Duration, maxNLeeches int, filterNodes []net.IPNet) *
 	ms.drain = make(chan Metadata, 10)
 	ms.incomingInfoHashes = newInfoHashes(maxNLeeches, filterNodes)
 	ms.termination = make(chan interface{})
+
+	go func() {
+		for range time.Tick(deadline) {
+			l := len(ms.incomingInfoHashes.infoHashes)
+
+			log.Printf("Sink status activeLeeches: %d", l)
+		}
+	}()
 
 	return ms
 }
@@ -98,6 +107,8 @@ func (ms *Sink) flush(result Metadata) {
 }
 
 func (ms *Sink) onLeechError(infoHash [20]byte, err error) {
+	//log.Printf("leech error hash: %s, error: %s\n", hex.EncodeToString(infoHash[:]), err)
+
 	if peer := ms.incomingInfoHashes.pop(infoHash); peer != nil {
 		go NewLeech(infoHash, peer, ms.PeerID, LeechEventHandlers{
 			OnSuccess: ms.flush,
