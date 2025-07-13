@@ -1,36 +1,56 @@
+version: "2"
+
 run:
   concurrency: 4
-  timeout: 5m
   tests: true
   allow-parallel-runners: true
-  go: '1.22'
+  go: '1.24'
 
 linters:
   enable:
     - gosec
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+
+    rules:
+
+      - linters:
+          - gosec
+        text: weak random number generator
+
+      - linters:
+          - gosec
+        text: weak cryptographic primitive
+
+      - linters:
+          - gosec
+        text: 'G115: integer overflow conversion'
+
+      - linters:
+          - staticcheck
+        text: 'ST1001: should not use dot imports'
+      
+      - linters:
+          - staticcheck
+        text: 'this check suggests that the pointer can be nil'
+        path: persistence/postgres_test.go
+
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+formatters:
+  enable:
     - gci
-
-issues:
-  new: true
-  exclude-rules:
-
-    - linters:
-        - staticcheck
-      text: "SA4027:"
-
-    - linters:
-        - staticcheck
-      text: "ST1005:"
-
-    - text: "weak random number generator"
-      linters:
-        - gosec
-
-    - text: "weak cryptographic primitive"
-      linters:
-        - gosec
-
-    - path: dht/mainline/routingTable.go
-      text: "integer overflow conversion uint -> int"
-      linters:
-        - gosec
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

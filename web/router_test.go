@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"tgragnato.it/magnetico/persistence"
+	"tgragnato.it/magnetico/v2/persistence"
 )
 
 func TestInfohashMiddleware(t *testing.T) {
@@ -73,6 +73,24 @@ func TestInfohashMiddleware(t *testing.T) {
 				t.Errorf("handler returned wrong status code: got %v want %v", status, tt.expectedStatus)
 			}
 		})
+	}
+}
+
+func TestRobotsHandler(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
+	rr := httptest.NewRecorder()
+
+	robotsHandler(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if ct := rr.Header().Get(ContentType); ct != "text/plain" {
+		t.Errorf("expected Content-Type text/plain, got %q", ct)
+	}
+	if body := rr.Body.String(); body != "User-agent: *\nDisallow: /\n" {
+		t.Error("got unexpected body")
 	}
 }
 

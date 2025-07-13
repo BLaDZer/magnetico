@@ -45,7 +45,47 @@ func TestRootHandler(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
 	}
 
+	if ct := rr.Header().Get(ContentType); ct != ContentTypeHtml {
+		t.Errorf("handler returned wrong content type: got %v want %v", ct, ContentTypeHtml)
+	}
+
 	if !strings.Contains(rr.Body.String(), "0 torrents available") {
 		t.Error("handler returned unexpected body: did not contain 0 torrents available")
+	}
+}
+
+func TestRootHandler_Redirect(t *testing.T) {
+	t.Parallel()
+
+	req, err := http.NewRequest("GET", "/not-root", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %v", err)
+	}
+	rr := httptest.NewRecorder()
+	rootHandler(rr, req)
+
+	if status := rr.Code; status != http.StatusMovedPermanently {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusMovedPermanently)
+	}
+	if loc := rr.Header().Get("Location"); loc != "/" {
+		t.Errorf("expected redirect location '/' but got '%s'", loc)
+	}
+}
+
+func TestRootHandler_InvalidMethod(t *testing.T) {
+	t.Parallel()
+
+	req, err := http.NewRequest("POST", "/", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %v", err)
+	}
+	rr := httptest.NewRecorder()
+	rootHandler(rr, req)
+
+	if status := rr.Code; status != http.StatusMethodNotAllowed {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusMethodNotAllowed)
+	}
+	if !strings.Contains(rr.Body.String(), "Method not allowed") {
+		t.Errorf("expected body to mention method not allowed, got '%s'", rr.Body.String())
 	}
 }

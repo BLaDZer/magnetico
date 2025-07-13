@@ -2,7 +2,9 @@ package persistence
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -15,18 +17,21 @@ import (
 
 	_ "github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"tgragnato.it/magnetico/stats"
+	"tgragnato.it/magnetico/v2/stats"
 )
 
 type postgresDatabase struct {
-	conn *sql.DB
+	conn        *sql.DB
+	isCockroach bool
 }
 
 func makePostgresDatabase(url_ *url.URL) (Database, error) {
 	db := new(postgresDatabase)
+	db.isCockroach = false
 
 	if url_.Scheme == "cockroach" {
 		url_.Scheme = "postgres"
+		db.isCockroach = true
 	}
 
 	var err error
@@ -143,14 +148,25 @@ func (db *postgresDatabase) Close() error {
 }
 
 func (db *postgresDatabase) GetNumberOfTorrents() (uint, error) {
-	rows, err := db.conn.Query("SELECT COUNT(*)::BIGINT AS exact_count FROM torrents;")
+	if rows, err := db.getExactCount(); err == nil {
+		return rows, nil
+	}
+
+	return db.getFuzzyCount()
+}
+
+func (db *postgresDatabase) getExactCount() (uint, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second/2)
+	defer cancel()
+
+	rows, err := db.conn.QueryContext(ctx, "SELECT last_value::BIGINT AS exact_count FROM seq_torrents_id;")
 	if err != nil {
 		return 0, err
 	}
 	defer rows.Close()
 
 	if !rows.Next() {
-		return 0, errors.New("no rows returned from `SELECT COUNT(*)::BIGINT AS exact_count FROM torrents;`")
+		return 0, errors.New("no rows returned from `SELECT last_value::BIGINT AS exact_count FROM seq_torrents_id;`")
 	}
 
 	// Returns int64: https://godoc.org/github.com/lib/pq#hdr-Data_Types
@@ -164,6 +180,63 @@ func (db *postgresDatabase) GetNumberOfTorrents() (uint, error) {
 		return 0, nil
 	} else {
 		return uint(*n), nil
+	}
+}
+
+func (db *postgresDatabase) getFuzzyCount() (uint, error) {
+	rows, err := db.conn.Query("SELECT reltuples::BIGINT AS estimate_count FROM pg_class WHERE relname='torrents';")
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return 0, errors.New("no rows returned from `SELECT reltuples::BIGINT AS estimate_count FROM pg_class WHERE relname='torrents';`")
+	}
+
+	// Returns int64: https://godoc.org/github.com/lib/pq#hdr-Data_Types
+	var n *int64
+	if err = rows.Scan(&n); err != nil {
+		return 0, err
+	}
+
+	// If the database is empty (i.e. 0 entries in 'torrents') then the query will return nil.
+	if n == nil {
+		return 0, nil
+	} else {
+		return uint(*n), nil
+	}
+}
+
+func (db *postgresDatabase) GetNumberOfQueryTorrents(query string, epoch int64) (uint64, error) {
+
+	var querySkeleton = `SELECT COUNT(*)
+		FROM torrents
+		WHERE
+    		name ILIKE CONCAT('%',$1::text,'%') AND
+			discovered_on <= $2;
+	`
+
+	rows, err := db.conn.Query(querySkeleton, query, epoch)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return 0, errors.New("no rows returned from `SELECT COUNT(*) FROM torrents WHERE name ILIKE CONCAT('%%',$1::text,'%%') AND discovered_on <= $2;`")
+	}
+
+	var n *int64
+	if err = rows.Scan(&n); err != nil {
+		return 0, err
+	}
+
+	// If the database is empty (i.e. 0 entries in 'torrents') then the query will return nil.
+	if n == nil || *n < 0 {
+		return 0, nil
+	} else {
+		return uint64(*n), nil
 	}
 }
 
@@ -190,10 +263,18 @@ func (db *postgresDatabase) QueryTorrents(
 			0
 		FROM torrents
 		WHERE
-			name ILIKE CONCAT('%',$1::text,'%') AND
+			(
+				$1::text = ''
+				OR name ILIKE CONCAT('%',$1::text,'%')
+				OR EXISTS (
+					SELECT 1 FROM files
+					WHERE files.torrent_id = torrents.id
+					AND files.path ILIKE CONCAT('%',$1::text,'%')
+				)
+			) AND
 			discovered_on <= $2 AND
-			{{.OrderOn}} {{GTEorLTE .Ascending}} $3 AND
-			id {{GTEorLTE .Ascending}} $4
+			($3 = 0 OR {{.OrderOn}} {{GTEorLTE .Ascending}} $3) AND
+			($4 = 0 OR id {{GTEorLTE .Ascending}} $4)
 		ORDER BY {{.OrderOn}} {{AscOrDesc .Ascending}}, id {{AscOrDesc .Ascending}}
 		LIMIT $5;
 	`
@@ -482,16 +563,68 @@ func (db *postgresDatabase) setupDatabase() error {
 	// https://stackoverflow.com/questions/36295883/golang-postgres-commit-unknown-command-error/36866993#36866993
 	db.closeRows(rows)
 
-	// Uncomment for future migrations:
-	//switch schemaVersion {
-	//case 0: // FROZEN.
-	//	log.Println("Updating (fake) database schema from 0 to 1...")
-	//	_, err = tx.Exec(`INSERT INTO migrations (schema_version) VALUES (1);`)
-	//	if err != nil {
-	//		return errors.Wrap(err, "sql.Tx.Exec (v0 -> v1)")
-	//	}
-	//	//fallthrough
-	//}
+	switch schemaVersion {
+	case 0: // FROZEN.
+		log.Println("Updating database schema from 0 to 1... (this might take a while)")
+		migrationStmt := `
+				-- Rename the existing table
+				ALTER TABLE files RENAME TO files_old;
+
+				-- Create the new partitioned table
+				CREATE TABLE files (
+					id          INTEGER PRIMARY KEY DEFAULT nextval('seq_files_id'),
+					torrent_id  INTEGER REFERENCES torrents ON DELETE CASCADE ON UPDATE RESTRICT,
+					size        BIGINT NOT NULL,
+					path        TEXT NOT NULL
+				) PARTITION BY HASH (id);
+
+				-- Create the partitions
+				DO $$
+				BEGIN
+					FOR i IN 0..99 LOOP
+						EXECUTE format(
+							'CREATE TABLE files_p%s PARTITION OF files FOR VALUES WITH (MODULUS 100, REMAINDER %s);',
+							i, i
+						);
+						EXECUTE format(
+							'CREATE INDEX IF NOT EXISTS idx_files_torrent_id_p%s ON files_p%s (torrent_id);',
+							i, i
+						);
+						EXECUTE format(
+							'CREATE INDEX IF NOT EXISTS idx_files_path_gin_trgm_p%s ON files_p%s USING GIN (path gin_trgm_ops);',
+							i, i
+						);
+					END LOOP;
+				END$$;
+
+				-- Copy data from the old table to the new partitioned table
+				INSERT INTO files (id, torrent_id, size, path) SELECT id, torrent_id, size, path FROM files_old;
+
+				-- Drop the old indexes, table and finalize the migration
+				DROP INDEX IF EXISTS idx_files_torrent_id;
+				DROP TABLE IF EXISTS files_old;
+				INSERT INTO migrations (schema_version) VALUES (1);
+			`
+		if db.isCockroach {
+			migrationStmt = `
+				CREATE INDEX IF NOT EXISTS idx_files_path_gin_trgm ON files USING GIN (path gin_trgm_ops);
+				INSERT INTO migrations (schema_version) VALUES (1);
+			`
+		}
+
+		if _, err := tx.Exec(migrationStmt); err != nil {
+			return errors.New("sql.Tx.Exec (v0 -> v1) " + err.Error())
+		}
+
+		// Uncomment for future migrations:
+		//	fallthrough
+		//case 2: // FROZEN.
+		//	log.Println("Updating database schema from 1 to 2... (this might take a while)")
+		//	_, err = tx.Exec(`INSERT INTO migrations (schema_version) VALUES (2);`)
+		//	if err != nil {
+		//		return errors.New("sql.Tx.Exec (v1 -> v2) " + err.Error())
+		//	}
+	}
 
 	if err = tx.Commit(); err != nil {
 		return errors.New("sql.Tx.Commit " + err.Error())
@@ -541,4 +674,40 @@ func (db *postgresDatabase) executeTemplate(text string, data interface{}, funcs
 		panic(err.Error())
 	}
 	return buf.String()
+}
+
+func (db *postgresDatabase) Export() (chan SimpleTorrentSummary, error) {
+	out := make(chan SimpleTorrentSummary)
+	rows, err := db.conn.Query("SELECT info_hash, name, id FROM torrents;")
+	if err != nil {
+		return nil, err
+	}
+
+	go func(out chan SimpleTorrentSummary, rows *sql.Rows) {
+		defer close(out)
+		defer rows.Close()
+		for rows.Next() {
+			var infoHash []byte
+			var name string
+			var id int64
+
+			err = rows.Scan(&infoHash, &name, &id)
+			if err != nil {
+				log.Fatalln("Error scanning row:", err.Error())
+			}
+
+			files, err := db.GetFiles(infoHash)
+			if err != nil {
+				log.Fatalln("Error getting files:", err.Error())
+			}
+
+			out <- SimpleTorrentSummary{
+				InfoHash: hex.EncodeToString(infoHash),
+				Name:     name,
+				Files:    files,
+			}
+		}
+	}(out, rows)
+
+	return out, nil
 }

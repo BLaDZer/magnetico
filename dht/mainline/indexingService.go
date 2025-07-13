@@ -4,12 +4,13 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"log"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
 	"reflect"
+	"strconv"
 	"time"
 
-	"tgragnato.it/magnetico/stats"
+	"tgragnato.it/magnetico/v2/stats"
 )
 
 type IndexingService struct {
@@ -97,29 +98,35 @@ func (is *IndexingService) index() {
 }
 
 func (is *IndexingService) bootstrap() {
-	bootstrappingPorts := []int{80, 443, 1337, 6969, 6881, 25401}
-	bootstrappingIPs := make([]net.IP, 0)
-	for _, dnsName := range is.bootstrapNodes {
+	for _, node := range is.bootstrapNodes {
+		dnsName, portStr, err := net.SplitHostPort(node)
+		if err != nil {
+			continue
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			continue
+		}
+		bootstrappingIPs := []net.IP{}
 		if ipAddrs, err := net.LookupIP(dnsName); err == nil {
 			bootstrappingIPs = append(bootstrappingIPs, ipAddrs...)
 		}
-	}
-	if len(bootstrappingIPs) == 0 {
-		return
-	}
 
-	log.Printf("Bootstrapping as routing table is empty...")
+		if len(bootstrappingIPs) == 0 || port == 0 {
+			continue
+		}
 
-	go stats.GetInstance().IncBootstrap()
-
-	for _, ip := range bootstrappingIPs {
-		for _, port := range bootstrappingPorts {
+		for _, ip := range bootstrappingIPs {
 			go is.protocol.SendMessage(
 				NewFindNodeQuery(is.nodeID, randomNodeID()),
 				&net.UDPAddr{IP: ip, Port: port},
 			)
 		}
 	}
+
+	log.Printf("Bootstrapping as routing table is empty...")
+
+	go stats.GetInstance().IncBootstrap()
 }
 
 func (is *IndexingService) findNeighbors() {
@@ -339,7 +346,7 @@ func randomNodeID() []byte {
 	_, err := rand.Read(nodeID)
 	if err != nil {
 		for i := 0; i < 20; i++ {
-			nodeID[i] = byte(mrand.Intn(256))
+			nodeID[i] = byte(mrand.IntN(256))
 		}
 	}
 	return nodeID

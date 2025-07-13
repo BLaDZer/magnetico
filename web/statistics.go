@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	g "github.com/maragudk/gomponents"
-	c "github.com/maragudk/gomponents/components"
-	. "github.com/maragudk/gomponents/html"
+	g "maragu.dev/gomponents"
+	c "maragu.dev/gomponents/components"
+	. "maragu.dev/gomponents/html"
 )
 
 func statistics() g.Node {
@@ -94,8 +94,8 @@ func statistics() g.Node {
 }
 
 func statisticsHandler(w http.ResponseWriter, r *http.Request) {
-	err := statistics().Render(w)
-	if err != nil {
+	w.Header().Set(ContentType, ContentTypeHtml)
+	if err := statistics().Render(w); err != nil {
 		http.Error(w, "Statistics render "+err.Error(), http.StatusInternalServerError)
 		return
 	}

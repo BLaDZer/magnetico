@@ -1,7 +1,7 @@
 package mainline
 
 import (
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"strconv"
 	"strings"
@@ -35,7 +35,7 @@ func TestReadFromOnClosedConn(t *testing.T) {
 
 	// Testing
 	_, _, err = conn.ReadFrom(buffer)
-	if !(err != nil && strings.HasSuffix(err.Error(), MSG_CLOSED_CONNECTION)) {
+	if err == nil || !strings.HasSuffix(err.Error(), MSG_CLOSED_CONNECTION) {
 		t.Fatal(MSG_UNEXPECTED_SUFFIX)
 	}
 }
@@ -58,7 +58,7 @@ func TestWriteToOnClosedConn(t *testing.T) {
 
 	// Testing
 	_, err = conn.WriteTo([]byte("estarabim"), laddr)
-	if !(err != nil && strings.HasSuffix(err.Error(), MSG_CLOSED_CONNECTION)) {
+	if err == nil || !strings.HasSuffix(err.Error(), MSG_CLOSED_CONNECTION) {
 		t.Fatal(MSG_UNEXPECTED_SUFFIX)
 	}
 }
@@ -105,7 +105,7 @@ func TestTransport_WriteMessages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := NewTransport(
-				net.JoinHostPort("::1", strconv.Itoa(rand.Intn(64511)+1024)),
+				net.JoinHostPort("::1", strconv.Itoa(rand.IntN(64511)+1024)),
 				func(m *Message, u *net.UDPAddr) {},
 				1000,
 			)

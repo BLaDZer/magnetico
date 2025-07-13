@@ -5,8 +5,8 @@ import (
 	"net"
 	"time"
 
-	"tgragnato.it/magnetico/dht"
-	"tgragnato.it/magnetico/persistence"
+	"tgragnato.it/magnetico/v2/dht"
+	"tgragnato.it/magnetico/v2/persistence"
 )
 
 const (
