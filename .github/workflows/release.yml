@@ -19,24 +19,24 @@ jobs:
     strategy:
       matrix:
         include:
-          - { go-version: 1.24, go-os: linux, go-arch: amd64 }
-          - { go-version: 1.24, go-os: linux, go-arch: 386 }
-          - { go-version: 1.24, go-os: linux, go-arch: arm64 }
-          - { go-version: 1.24, go-os: linux, go-arch: arm }
-          - { go-version: 1.24, go-os: openbsd, go-arch: amd64 }
-          - { go-version: 1.24, go-os: openbsd, go-arch: 386 }
-          - { go-version: 1.24, go-os: openbsd, go-arch: arm64 }
-          - { go-version: 1.24, go-os: openbsd, go-arch: arm }
-          - { go-version: 1.24, go-os: darwin, go-arch: arm64 }
-          - { go-version: 1.24, go-os: freebsd, go-arch: amd64 }
+          - { go-version: 1.25, go-os: linux, go-arch: amd64 }
+          - { go-version: 1.25, go-os: linux, go-arch: 386 }
+          - { go-version: 1.25, go-os: linux, go-arch: arm64 }
+          - { go-version: 1.25, go-os: linux, go-arch: arm }
+          - { go-version: 1.25, go-os: openbsd, go-arch: amd64 }
+          - { go-version: 1.25, go-os: openbsd, go-arch: 386 }
+          - { go-version: 1.25, go-os: openbsd, go-arch: arm64 }
+          - { go-version: 1.25, go-os: openbsd, go-arch: arm }
+          - { go-version: 1.25, go-os: darwin, go-arch: arm64 }
+          - { go-version: 1.25, go-os: freebsd, go-arch: amd64 }
 
     steps:
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         
       - name: Set up Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
         
@@ -48,7 +48,7 @@ jobs:
           GOARCH: ${{ matrix.go-arch }}
       
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: magnetico-${{ matrix.go-os }}-${{ matrix.go-arch }}
           path: magnetico-${{ matrix.go-os }}-${{ matrix.go-arch }}
@@ -68,7 +68,7 @@ jobs:
     steps:
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Conventional Changelog Action
         id: changelog
@@ -119,7 +119,7 @@ jobs:
           push: true
 
       - name: Download workflow artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: magnetico-*-*
 
