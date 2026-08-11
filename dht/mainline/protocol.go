@@ -280,7 +280,7 @@ func NewFindNodeResponse(t []byte, id []byte, nodes []CompactNodeInfo) *Message 
 	}
 }
 
-func NewGetPeersResponseWithValues(t []byte, id []byte, token []byte, values []CompactPeer) *Message {
+func NewGetPeersResponseWithValues(t []byte, id []byte, token []byte, values []CompactPeer, bfSdBf *BloomFilter, bfPeBf *BloomFilter) *Message {
 	return &Message{
 		Y: "r",
 		T: t,
@@ -288,6 +288,8 @@ func NewGetPeersResponseWithValues(t []byte, id []byte, token []byte, values []C
 			ID:     id,
 			Token:  token,
 			Values: values,
+			BFsd:   bfSdBf,
+			BFpe:   bfPeBf,
 		},
 	}
 }
@@ -344,7 +346,7 @@ func (p *Protocol) updateTokenSecret() {
 	if err != nil {
 		len := mrand.IntN(256)
 		p.tokenSecret = make([]byte, len)
-		for i := 0; i < len; i++ {
+		for i := range len {
 			p.tokenSecret[i] = byte(mrand.IntN(256))
 		}
 	}

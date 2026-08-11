@@ -19,24 +19,24 @@ jobs:
     strategy:
       matrix:
         include:
-          - { go-version: 1.25, go-os: linux, go-arch: amd64 }
-          - { go-version: 1.25, go-os: linux, go-arch: 386 }
-          - { go-version: 1.25, go-os: linux, go-arch: arm64 }
-          - { go-version: 1.25, go-os: linux, go-arch: arm }
-          - { go-version: 1.25, go-os: openbsd, go-arch: amd64 }
-          - { go-version: 1.25, go-os: openbsd, go-arch: 386 }
-          - { go-version: 1.25, go-os: openbsd, go-arch: arm64 }
-          - { go-version: 1.25, go-os: openbsd, go-arch: arm }
-          - { go-version: 1.25, go-os: darwin, go-arch: arm64 }
-          - { go-version: 1.25, go-os: freebsd, go-arch: amd64 }
+          - { go-version: 1.26, go-os: linux, go-arch: amd64 }
+          - { go-version: 1.26, go-os: linux, go-arch: 386 }
+          - { go-version: 1.26, go-os: linux, go-arch: arm64 }
+          - { go-version: 1.26, go-os: linux, go-arch: arm }
+          - { go-version: 1.26, go-os: openbsd, go-arch: amd64 }
+          - { go-version: 1.26, go-os: openbsd, go-arch: 386 }
+          - { go-version: 1.26, go-os: openbsd, go-arch: arm64 }
+          - { go-version: 1.26, go-os: openbsd, go-arch: arm }
+          - { go-version: 1.26, go-os: darwin, go-arch: arm64 }
+          - { go-version: 1.26, go-os: freebsd, go-arch: amd64 }
 
     steps:
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         
       - name: Set up Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go-version }}
         
@@ -48,7 +48,7 @@ jobs:
           GOARCH: ${{ matrix.go-arch }}
       
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: magnetico-${{ matrix.go-os }}-${{ matrix.go-arch }}
           path: magnetico-${{ matrix.go-os }}-${{ matrix.go-arch }}
@@ -68,7 +68,7 @@ jobs:
     steps:
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Conventional Changelog Action
         id: changelog
@@ -85,20 +85,20 @@ jobs:
           skip-version-file: true
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and export to Docker
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           load: true
@@ -109,7 +109,7 @@ jobs:
           docker run --rm ghcr.io/${{ github.repository }}:test --help
 
       - name: Build and push Docker Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           platforms: linux/amd64,linux/arm64
           context: .
@@ -118,16 +118,28 @@ jobs:
           tags: ghcr.io/${{ github.repository }}:${{ steps.changelog.outputs.tag }}, ghcr.io/${{ github.repository }}:latest
           push: true
 
+      - name: Extract CGo binaries from Docker Image
+        run: |
+          docker create --name extract-amd64 --platform linux/amd64 ghcr.io/${{ github.repository }}:${{ steps.changelog.outputs.tag }}
+          docker cp extract-amd64:/usr/bin/magnetico magnetico-linux-amd64-cgo
+          docker rm extract-amd64
+          docker create --name extract-arm64 --platform linux/arm64 ghcr.io/${{ github.repository }}:${{ steps.changelog.outputs.tag }}
+          docker cp extract-arm64:/usr/bin/magnetico magnetico-linux-arm64-cgo
+          docker rm extract-arm64
+
       - name: Download workflow artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: magnetico-*-*
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: ${{ steps.changelog.outputs.skipped == 'false' }}
         with:
           tag_name: ${{ steps.changelog.outputs.tag }}
           body: ${{ steps.changelog.outputs.clean_changelog }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          files: magnetico-*-*/magnetico-*-*
+          files: |
+            magnetico-*-*/magnetico-*-*
+            magnetico-linux-amd64-cgo
+            magnetico-linux-arm64-cgo

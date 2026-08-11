@@ -110,7 +110,10 @@ func main() {
 	// The Event Loop
 	for stopped := false; !stopped; {
 		select {
-		case result := <-trawlingManager.Output():
+		case result, ok := <-trawlingManager.Output():
+			if !ok {
+				continue
+			}
 			infoHash := result.InfoHash()
 
 			exists, err := database.DoesTorrentExist(infoHash[:])

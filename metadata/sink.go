@@ -36,7 +36,7 @@ type Sink struct {
 	incomingInfoHashes *infoHashes
 
 	terminated  bool
-	termination chan interface{}
+	termination chan any
 }
 
 func NewSink(deadline time.Duration, maxNLeeches int, filterNodes []net.IPNet) *Sink {
@@ -46,7 +46,7 @@ func NewSink(deadline time.Duration, maxNLeeches int, filterNodes []net.IPNet) *
 	ms.deadline = deadline
 	ms.drain = make(chan Metadata, 10)
 	ms.incomingInfoHashes = newInfoHashes(maxNLeeches, filterNodes)
-	ms.termination = make(chan interface{})
+	ms.termination = make(chan any)
 
 	go func() {
 		for range time.Tick(deadline) {

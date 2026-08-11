@@ -7,7 +7,6 @@ import (
 	"net"
 	"regexp"
 
-	"github.com/bits-and-blooms/bloom/v3"
 	"tgragnato.it/magnetico/v2/bencode"
 )
 
@@ -58,7 +57,7 @@ type QueryArguments struct {
 	//   - `BFpe`: Bloom Filter (256 bytes) representing all stored peers (leeches) for that
 	//             infohash
 	// Defined in BEP 33 "DHT Scrapes" for `get_peers` queries.
-	Scrape int `bencode:"noseed,omitempty"`
+	Scrape int `bencode:"scrape,omitempty"`
 }
 
 type ResponseValues struct {
@@ -84,10 +83,9 @@ type ResponseValues struct {
 	// below two fields to the "r" dictionary in the response:
 	// Defined in BEP 33 "DHT Scrapes" for responses to `get_peers` queries.
 	// Bloom Filter (256 bytes) representing all stored seeds for that infohash:
-	BFsd *bloom.BloomFilter `bencode:"BFsd,omitempty"`
+	BFsd *BloomFilter `bencode:"BFsd,omitempty"`
 	// Bloom Filter (256 bytes) representing all stored peers (leeches) for that infohash:
-	BFpe *bloom.BloomFilter `bencode:"BFpe,omitempty"`
-	// TODO: write marshallers for those fields above ^^
+	BFpe *BloomFilter `bencode:"BFpe,omitempty"`
 }
 
 type Error struct {
@@ -272,7 +270,7 @@ func (cni CompactNodeInfo) MarshalBinary() []byte {
 }
 
 func (e Error) MarshalBencode() ([]byte, error) {
-	return []byte(fmt.Sprintf("li%de%d:%se", e.Code, len(e.Message), e.Message)), nil
+	return fmt.Appendf(nil, "li%de%d:%se", e.Code, len(e.Message), e.Message), nil
 }
 
 func (e *Error) UnmarshalBencode(b []byte) (err error) {
