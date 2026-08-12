@@ -1,7 +1,7 @@
 package main
 
 import (
-        "encoding/hex"
+	"encoding/hex"
 	"log"
 	"os"
 	"os/signal"
