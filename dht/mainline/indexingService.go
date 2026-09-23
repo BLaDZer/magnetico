@@ -124,7 +124,7 @@ func (is *IndexingService) bootstrap() {
 				&net.UDPAddr{IP: ip, Port: port},
 			)
 
-			log.Printf("Using bootstrap node IP %s port %s", ip, port)
+			log.Printf("Using bootstrap node IP %s port %d", ip, port)
 		}
 	}
 
