@@ -98,6 +98,8 @@ func (is *IndexingService) index() {
 }
 
 func (is *IndexingService) bootstrap() {
+	log.Printf("Bootstrapping as routing table is empty...")
+
 	for _, node := range is.bootstrapNodes {
 		dnsName, portStr, err := net.SplitHostPort(node)
 		if err != nil {
@@ -121,10 +123,10 @@ func (is *IndexingService) bootstrap() {
 				NewFindNodeQuery(is.nodeID, randomNodeID()),
 				&net.UDPAddr{IP: ip, Port: port},
 			)
+
+			log.Printf("Using bootstrap node IP %s port %s", ip, port)
 		}
 	}
-
-	log.Printf("Bootstrapping as routing table is empty...")
 
 	go stats.GetInstance().IncBootstrap()
 }
